@@ -7,6 +7,7 @@ from credentials import get_credentials
 from credentials import get_nova_credentials
 from credentials import get_nova_credentials_v2
 from utils import print_values_server
+from collections import defaultdict
 
 class CreateTopo:
 	def __init__(topo,info):
@@ -14,13 +15,20 @@ class CreateTopo:
 		topo.subnet_route_route = len(info['link']['route_route'])
 		topo.subnet_route_host = len(info['link']['route_host'])
 		topo.subnet_num = topo.subnet_route_route+topo.subnet_route_host
-		topo.route_num = info['routes']
+		topo.router_num = info['routes']
 		topo.network_id = u'' 
 		topo.subnet_id = {}
 		topo.subnet_cidr = {}
+		topo.router_cidr = {}
+		topo.ports_id = {}
+		topo.router_id = {}
+		topo.route_ip = {}
 		topo.neutron_credentials = get_credentials()
 		topo.neutron = client.Client(**topo.neutron_credentials)
-		topo.router_id = {}
+		for tmp in range(topo.subnet_num):
+			topo.ports_id[tmp] = {}
+		for tmp in range(topo.subnet_num):
+			topo.route_ip[tmp] = {}
 	def Create_net(topo):
 		body_sample = {'network': {'name': topo.info['network'],
                    'admin_state_up': True}}
@@ -31,7 +39,7 @@ class CreateTopo:
 		
 		subnet_list=[]
 		for tmp in range(topo.subnet_num):
-			subnet={'cidr':'10.0.'+str(tmp)+'.0/24',
+			subnet={'cidr':'10.1.'+str(tmp)+'.0/24',
 				'ip_version':4,
 				'network_id':topo.network_id,
 				'name':'subnet'+str(tmp)}
@@ -46,13 +54,70 @@ class CreateTopo:
 			print topo.subnet_id[tmp]
 			print topo.subnet_cidr[tmp]
 
-	def Create_routes(topo):
-		for tmp in range(topo.route_num):
+	def Create_routers(topo):
+		for tmp in range(topo.router_num):
 			request = {'router': {'name': 'router'+str(tmp),
                         	  'admin_state_up': True}}
    			router = topo.neutron.create_router(request)
     			topo.router_id[tmp] = router['router']['id']
+	def Create_ports(topo):
+		for subnets in range(topo.subnet_route_route):
+			ports_ip = {}
+			for tmp in range(len(topo.info['link']['route_route'][subnets])):
+				body_value = {'port':{
+					'admin_state_up':True,
+					'name':'n'+str(subnets)+'port'+str(tmp),
+					'network_id':topo.network_id,
+					'fixed_ips':[{'subnet_id':topo.subnet_id[subnets]}],
+				}}
+				port = topo.neutron.create_port(body=body_value)
+				#print port
+				port_id = port['port']['id']
+				print port_id
+				topo.ports_id[subnets][tmp] = port['port']['id']
+				router = topo.info['link']['route_route'][subnets][tmp]
+				topo.neutron.add_interface_router(\
+					router = topo.router_id[router],
+					body = {'port_id':port_id})
+				ports_ip[router] = port['port']['fixed_ips'][0]['ip_address']
+			for router_1 in topo.info['link']['route_route'][subnets]:
+				for router_2 in topo.info['link']['route_route'][subnets]:
+					if router_1 != router_2:
+						topo.route_ip[router_1][router_2] = ports_ip[router_2]
+		for subnets in range(topo.subnet_route_route,topo.subnet_num):
+			for tmp in range(len(topo.info['link']['route_host'][subnets-topo.subnet_route_host])):
+				if tmp == 0:
+					body_value = {'port':{
+						'admin_state_up':True,
+						'fixed_ips':[{'subnet_id':topo.subnet_id[subnets],
+							'ip_address':'10.1.'+str(subnets)+'.1'}],
+						'name':'n'+str(subnets)+'port'+str(tmp),
+						'network_id':topo.network_id,
+					}}
+					port = topo.neutron.create_port(body=body_value)
+					port_id = port['port']['id']
+					topo.ports_id[subnets][tmp] = port_id
+					router = topo.info['link']['route_host'][subnets-topo.subnet_route_route][tmp]
+					topo.neutron.add_interface_router(\
+						router=topo.router_id[router],
+						body={'port_id':port_id})
+					topo.router_cidr[router] = topo.subnet_cidr[subnets]
+			else:
+				body_port = {'port':{
+					'admin_state_up':True,
+					'name':'n'+str(subnets)+'port'+str(tmp),
+					'network_id':topo.network_id,
+					'fixed_ips':[{'subnet_id':topo.subnet_id[subnets]}],
+				}}
+				port = topo.neutron.create_port(body=body_port)
+				port_id = port['port']['id']
+				topo.ports_id[subnets][tmp] = port_id
+						
+		
 
+ 	
+
+	
 if __name__=='__main__':
 	info={'vms':2,
 	'routes':2,
@@ -65,4 +130,5 @@ if __name__=='__main__':
 
 	topo = CreateTopo(info)
 	topo.Create_net()
-	topo.Create_routes()		
+	topo.Create_routers()		
+	topo.Create_ports()
