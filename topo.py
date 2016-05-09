@@ -23,8 +23,10 @@ class CreateTopo:
 		topo.ports_id = {}
 		topo.router_id = {}
 		topo.route_ip = {}
+		topo.nova_Credentials = get_nova_credentials_v2()
 		topo.neutron_credentials = get_credentials()
 		topo.neutron = client.Client(**topo.neutron_credentials)
+		topo.nova = nvclient.Client(**topo.nova_Credentials)
 		for tmp in range(topo.subnet_num):
 			topo.ports_id[tmp] = {}
 		for tmp in range(topo.subnet_num):
@@ -113,9 +115,19 @@ class CreateTopo:
 				port_id = port['port']['id']
 				topo.ports_id[subnets][tmp] = port_id
 						
-		
 
- 	
+	def Create_vms(topo):
+		for subnets in range(topo.subnet_route_route,topo.subnet_num):
+			for tmp in range(1,len(topo.info['link']['route_host'][subnets-topo.subnet_route_route])):
+				nics = [{'port-id':topo.ports_id[subnets][tmp]}]
+				image = topo.nova.images.find(name = topo.info['image'])
+				flavor = topo.nova.flavors.find(name = topo.info['flavor'])	
+ 				instance = topo,nova.server.create(
+					name = 'vm'+str(topo.info['link']['route_host'][subnet-topo.subnet_route_route][tmp]),
+					flavor = flavor,
+					image = image,
+					key_name = 'keypair',
+					nics = nics)
 
 	
 if __name__=='__main__':
@@ -132,3 +144,4 @@ if __name__=='__main__':
 	topo.Create_net()
 	topo.Create_routers()		
 	topo.Create_ports()
+	topo.Create_vms()
