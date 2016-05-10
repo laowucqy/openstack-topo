@@ -1,13 +1,11 @@
 #coding=utf-8
 #!/usr/bin/env python
 
-from neutronclient.v2_0 import client
-import novaclient.v1_1.client as nvclient
-from credentials import get_credentials
-from credentials import get_nova_credentials
 from credentials import get_nova_credentials_v2
-from utils import print_values_server
-from collections import defaultdict
+from credentials import get_credentials
+from novaclient.client import Client as nova_client
+from neutronclient.v2_0.client import Client as neutron_client
+from utils import print_values
 
 class CreateTopo:
 	def __init__(topo,info):
@@ -23,10 +21,10 @@ class CreateTopo:
 		topo.ports_id = {}
 		topo.router_id = {}
 		topo.route_ip = {}
-		topo.nova_Credentials = get_nova_credentials_v2()
 		topo.neutron_credentials = get_credentials()
-		topo.neutron = client.Client(**topo.neutron_credentials)
-		topo.nova = nvclient.Client(**topo.nova_Credentials)
+		topo.nova_credentials = get_nova_credentials_v2()
+		topo.neutron = neutron_client(**topo.neutron_credentials)
+		topo.nova = nova_client(**topo.nova_credentials)
 		for tmp in range(topo.subnet_num):
 			topo.ports_id[tmp] = {}
 		for tmp in range(topo.subnet_num):
@@ -122,8 +120,8 @@ class CreateTopo:
 				nics = [{'port-id':topo.ports_id[subnets][tmp]}]
 				image = topo.nova.images.find(name = topo.info['image'])
 				flavor = topo.nova.flavors.find(name = topo.info['flavor'])	
- 				instance = topo,nova.server.create(
-					name = 'vm'+str(topo.info['link']['route_host'][subnet-topo.subnet_route_route][tmp]),
+ 				instance = topo.nova.servers.create(
+					name = 'vm'+str(topo.info['link']['route_host'][subnets-topo.subnet_route_route][tmp]),
 					flavor = flavor,
 					image = image,
 					key_name = 'keypair',
@@ -137,7 +135,7 @@ if __name__=='__main__':
 		'route_host':[(1,1),(0,0)]},
 	'flavor':'m1.tiny',
 	'network':'sample-net',
-	'image':'cirros-0.3.4-x86_64-disk'
+	'image':'cirros-0.3.4-x86_64'
 	}
 
 	topo = CreateTopo(info)
