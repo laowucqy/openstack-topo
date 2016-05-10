@@ -126,13 +126,68 @@ class CreateTopo:
 					image = image,
 					key_name = 'keypair',
 					nics = nics)
+	def init_LinkGraph(topo):
+		topo.LinkGraph = {}
+		for router_1 in range(topo.info['routes']):
+			topo.LinkGraph[router_1]={}
+			for router_2 in range(topo.info['routes']):
+				topo.LinkGraph[router_1][router_2] =  999999  #MAX
+		for Link_Group in range(len(topo.info['link']['route_route'])):
+			for router_1 in topo.info['link']['route_route'][Link_Group]:
+				for router_2 in topo.info['link']['route_route'][Link_Group]:
+					if router_1 != router_2:
+						topo.LinkGraph[router_1][router_2] = 1
+					else:
+						topo.LinkGraph[router_1][router_2] = 0
 
-	
+	def init_nextHop(topo):
+		topo.nextHop = {}
+		for router in range(topo.info['routes']):
+			topo.nextHop[router] = {}
+	def BFS_routes(topo):
+		nextHop = {}
+		for router in range(topo.info['routes']):
+			nextHop[router] = {}
+		for bejin_router in range(topo.info['routes']):
+			visited = {}
+			queue = []
+			for router in range(topo.info['routes']):
+				visited[router] = False
+			visited[bejin_router] = True
+			for router in range(topo.info['routes']):
+				if visited[router] == False and topo.LinkGraph[bejin_router][router] == 1:
+					visited[router] = True
+					nextHop[bejin_router][router] = router
+			for router in range(topo.info['routes']):
+				if visited[router] == True and bejin_router != router:
+					queue.append(router)
+					while(len(queue)!=0):
+						tmp_router = queue.pop(0)
+						for end_router in range(topo.info['routes']):
+							if visited[end_router] == False and topo.LinkGraph[tmp_router][end_router] == 1:
+								visited[end_router] = True
+								queue.append(end_router)
+								nextHop[bejin_router][end_router] = router
+												
+		topo.nextHop = nextHop
+					        
+			
+	def add_routeTable(topo):
+		for router_1 in range(topo.info['routes']):
+			routes = []
+			for router_2 in range(topo.info['routes']):
+				if router_1 != router_2 and router_2 in topo.router_cidr.keys() and router_2 in topo.nextHop[router_2].keys():
+					end_Cidr = topo.router_cidr[router_2]
+					nextHop_ip = topo.route_ip[router_1][topo.nextHop[router_1][router_2]]
+					routes.append({'destination':end_Cidr,'nexthop':nextHop_ip})
+			body_routes = {'router':{'routes':routes}}
+			topo.neutron.update_router(topo.router_id[router_1],body_routes)
+
 if __name__=='__main__':
-	info={'vms':2,
-	'routes':2,
-	'link':{'route_route':[(0,1)],
-		'route_host':[(1,1),(0,0)]},
+	info={'vms':4,
+	'routes':4,
+	'link':{'route_route':[(0,1),(1,2),(1,3)],
+		'route_host':[(0,0),(1,1),(2,2),(3,3)]},
 	'flavor':'m1.tiny',
 	'network':'sample-net',
 	'image':'cirros-0.3.4-x86_64'
@@ -143,3 +198,8 @@ if __name__=='__main__':
 	topo.Create_routers()		
 	topo.Create_ports()
 	topo.Create_vms()
+	topo.init_nextHop()
+	topo.init_LinkGraph()
+	topo.BFS_routes()
+	topo.add_routeTable()
+	#print topo.nextHop
