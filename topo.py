@@ -6,6 +6,8 @@ from credentials import get_credentials
 from novaclient.client import Client as nova_client
 from neutronclient.v2_0.client import Client as neutron_client
 from utils import print_values
+import os 
+import time
 
 class CreateTopo:
 	def __init__(topo,info):
@@ -51,15 +53,21 @@ class CreateTopo:
 			#tmp=int(tmp)
 			topo.subnet_id[tmp]=subnet['subnets'][tmp]['id']
 			topo.subnet_cidr[tmp]=subnet['subnets'][tmp]['cidr']
-			print topo.subnet_id[tmp]
-			print topo.subnet_cidr[tmp]
+			#print topo.subnet_id[tmp]
+			print 'subnet'+str(tmp),topo.subnet_cidr[tmp],'is created'
+		print \
 
+		
 	def Create_routers(topo):
 		for tmp in range(topo.router_num):
 			request = {'router': {'name': 'router'+str(tmp),
                         	  'admin_state_up': True}}
    			router = topo.neutron.create_router(request)
     			topo.router_id[tmp] = router['router']['id']
+			print 'router'+str(tmp),'id:',topo.router_id[tmp],'is created'
+		print \
+			
+			
 	def Create_ports(topo):
 		for subnets in range(topo.subnet_route_route):
 			ports_ip = {}
@@ -73,7 +81,7 @@ class CreateTopo:
 				port = topo.neutron.create_port(body=body_value)
 				#print port
 				port_id = port['port']['id']
-				print port_id
+				print 'created port r2r:id---',port_id
 				topo.ports_id[subnets][tmp] = port['port']['id']
 				router = topo.info['link']['route_route'][subnets][tmp]
 				topo.neutron.add_interface_router(\
@@ -84,6 +92,8 @@ class CreateTopo:
 				for router_2 in topo.info['link']['route_route'][subnets]:
 					if router_1 != router_2:
 						topo.route_ip[router_1][router_2] = ports_ip[router_2]
+		print \
+			
 		for subnets in range(topo.subnet_route_route,topo.subnet_num):
 			for tmp in range(len(topo.info['link']['route_host'][subnets-topo.subnet_route_host])):
 				if tmp == 0:
@@ -102,17 +112,18 @@ class CreateTopo:
 						router=topo.router_id[router],
 						body={'port_id':port_id})
 					topo.router_cidr[router] = topo.subnet_cidr[subnets]
-			else:
-				body_port = {'port':{
-					'admin_state_up':True,
-					'name':'n'+str(subnets)+'port'+str(tmp),
-					'network_id':topo.network_id,
-					'fixed_ips':[{'subnet_id':topo.subnet_id[subnets]}],
-				}}
-				port = topo.neutron.create_port(body=body_port)
-				port_id = port['port']['id']
-				topo.ports_id[subnets][tmp] = port_id
-						
+				else:
+					body_port = {'port':{
+						'admin_state_up':True,
+						'name':'n'+str(subnets)+'port'+str(tmp),
+						'network_id':topo.network_id,
+						'fixed_ips':[{'subnet_id':topo.subnet_id[subnets]}],
+					}}
+					port = topo.neutron.create_port(body=body_port)
+					port_id = port['port']['id']
+					print 'created port r2h:id---',port_id
+					topo.ports_id[subnets][tmp] = port_id
+		print \
 
 	def Create_vms(topo):
 		for subnets in range(topo.subnet_route_route,topo.subnet_num):
@@ -120,12 +131,18 @@ class CreateTopo:
 				nics = [{'port-id':topo.ports_id[subnets][tmp]}]
 				image = topo.nova.images.find(name = topo.info['image'])
 				flavor = topo.nova.flavors.find(name = topo.info['flavor'])	
+				vm_name = 'vm'+str(topo.info['link']['route_host'][subnets-topo.subnet_route_route][tmp])
  				instance = topo.nova.servers.create(
 					name = 'vm'+str(topo.info['link']['route_host'][subnets-topo.subnet_route_route][tmp]),
 					flavor = flavor,
 					image = image,
-					key_name = 'keypair',
+					key_name = 'demo-key',
 					nics = nics)
+				time.sleep(5)
+				print ("created:%s",vm_name)
+		print \
+		
+				
 	def init_LinkGraph(topo):
 		topo.LinkGraph = {}
 		for router_1 in range(topo.info['routes']):
@@ -176,21 +193,28 @@ class CreateTopo:
 		for router_1 in range(topo.info['routes']):
 			routes = []
 			for router_2 in range(topo.info['routes']):
-				if router_1 != router_2 and router_2 in topo.router_cidr.keys() and router_2 in topo.nextHop[router_2].keys():
+				if router_1 != router_2 and router_2 in topo.router_cidr.keys() and router_2 in topo.nextHop[router_1].keys():
+					print router_1
+					print router_2
 					end_Cidr = topo.router_cidr[router_2]
+					print end_Cidr
 					nextHop_ip = topo.route_ip[router_1][topo.nextHop[router_1][router_2]]
+					print nextHop_ip
 					routes.append({'destination':end_Cidr,'nexthop':nextHop_ip})
 			body_routes = {'router':{'routes':routes}}
+			print body_routes
 			topo.neutron.update_router(topo.router_id[router_1],body_routes)
+		print 'routeTable added'
+		print topo.nextHop
 
 if __name__=='__main__':
 	info={'vms':4,
-	'routes':4,
-	'link':{'route_route':[(0,1),(1,2),(1,3)],
-		'route_host':[(0,0),(1,1),(2,2),(3,3)]},
-	'flavor':'m1.tiny',
+	'routes':3,
+	'link':{'route_route':[(0,1),(1,2)],
+		'route_host':[(0,0,1),(2,2,3)]},
+	'flavor':'8b7842f3-458d-4d1b-8988-189f4864ba04',
 	'network':'sample-net',
-	'image':'cirros-0.3.4-x86_64'
+	'image':'38d09e27-c127-4229-a1ff-0e52ee4131ad'
 	}
 
 	topo = CreateTopo(info)
@@ -201,5 +225,6 @@ if __name__=='__main__':
 	topo.init_nextHop()
 	topo.init_LinkGraph()
 	topo.BFS_routes()
+	print topo.nextHop
 	topo.add_routeTable()
 	#print topo.nextHop
